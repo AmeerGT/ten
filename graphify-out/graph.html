@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>graphify - graphify-out/graph.html</title>
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f0f1a; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; display: flex; height: 100vh; overflow: hidden; }
+  #graph { flex: 1; }
+  #sidebar { width: 280px; background: #1a1a2e; border-left: 1px solid #2a2a4e; display: flex; flex-direction: column; overflow: hidden; }
+  #search-wrap { padding: 12px; border-bottom: 1px solid #2a2a4e; }
+  #search { width: 100%; background: #0f0f1a; border: 1px solid #3a3a5e; color: #e0e0e0; padding: 7px 10px; border-radius: 6px; font-size: 13px; outline: none; }
+  #search:focus { border-color: #4E79A7; }
+  #search-results { max-height: 140px; overflow-y: auto; padding: 4px 12px; border-bottom: 1px solid #2a2a4e; display: none; }
+  .search-item { padding: 4px 6px; cursor: pointer; border-radius: 4px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .search-item:hover { background: #2a2a4e; }
+  #info-panel { padding: 14px; border-bottom: 1px solid #2a2a4e; min-height: 140px; }
+  #info-panel h3 { font-size: 13px; color: #aaa; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+  #info-content { font-size: 13px; color: #ccc; line-height: 1.6; }
+  #info-content .field { margin-bottom: 5px; }
+  #info-content .field b { color: #e0e0e0; }
+  #info-content .empty { color: #555; font-style: italic; }
+  .neighbor-link { display: block; padding: 2px 6px; margin: 2px 0; border-radius: 3px; cursor: pointer; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 3px solid #333; }
+  .neighbor-link:hover { background: #2a2a4e; }
+  #neighbors-list { max-height: 160px; overflow-y: auto; margin-top: 4px; }
+  #legend-wrap { flex: 1; overflow-y: auto; padding: 12px; }
+  #legend-wrap h3 { font-size: 13px; color: #aaa; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .legend-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; border-radius: 4px; font-size: 12px; }
+  .legend-item:hover { background: #2a2a4e; padding-left: 4px; }
+  .legend-item.dimmed { opacity: 0.35; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .legend-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .legend-count { color: #666; font-size: 11px; }
+  #stats { padding: 10px 14px; border-top: 1px solid #2a2a4e; font-size: 11px; color: #555; }
+</style>
+</head>
+<body>
+<div id="graph"></div>
+<div id="sidebar">
+  <div id="search-wrap">
+    <input id="search" type="text" placeholder="Search nodes..." autocomplete="off">
+    <div id="search-results"></div>
+  </div>
+  <div id="info-panel">
+    <h3>Node Info</h3>
+    <div id="info-content"><span class="empty">Click a node to inspect it</span></div>
+  </div>
+  <div id="legend-wrap">
+    <h3>Communities</h3>
+    <div id="legend"></div>
+  </div>
+  <div id="stats">52 nodes &middot; 55 edges &middot; 8 communities</div>
+</div>
+<script>
+const RAW_NODES = [{"id": "claude_md_graphify_skill", "label": "Graphify Skill Registration", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Graphify Skill Registration", "community": 5, "community_name": "Claude MD Integration", "source_file": ".claude/CLAUDE.md", "file_type": "document", "degree": 2}, {"id": "skill_md_graphify_skill", "label": "Graphify Skill", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 22.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Graphify Skill", "community": 5, "community_name": "Claude MD Integration", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 4}, {"id": "skill_md_graphify_pipeline", "label": "Graphify Pipeline", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 40.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Graphify Pipeline", "community": 2, "community_name": "Graph Detection & Output Formats", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 10}, {"id": "skill_md_graphify_trigger", "label": "Graphify Trigger /graphify", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Graphify Trigger /graphify", "community": 5, "community_name": "Claude MD Integration", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_detect", "label": "Graphify File Detection (Step 2)", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Graphify File Detection (Step 2)", "community": 2, "community_name": "Graph Detection & Output Formats", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_ast_extraction", "label": "AST Structural Extraction (Step 3A)", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 28.0, "font": {"size": 12, "color": "#ffffff"}, "title": "AST Structural Extraction (Step 3A)", "community": 0, "community_name": "Extraction & Ingestion Pipeline", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 6}, {"id": "skill_md_graphify_semantic_extraction", "label": "Semantic Extraction via Subagents (Step 3B)", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 25.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Semantic Extraction via Subagents (Step 3B)", "community": 0, "community_name": "Extraction & Ingestion Pipeline", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 5}, {"id": "skill_md_graphify_extraction_cache", "label": "Extraction Cache", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 19.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Extraction Cache", "community": 0, "community_name": "Extraction & Ingestion Pipeline", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 3}, {"id": "skill_md_graphify_merge", "label": "AST + Semantic Merge (Step 3C)", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 19.0, "font": {"size": 12, "color": "#ffffff"}, "title": "AST + Semantic Merge (Step 3C)", "community": 0, "community_name": "Extraction & Ingestion Pipeline", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 3}, {"id": "skill_md_graphify_build_cluster", "label": "Graph Build and Cluster (Step 4)", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 28.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Graph Build and Cluster (Step 4)", "community": 3, "community_name": "Graph Analysis & Clustering", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 6}, {"id": "skill_md_graphify_community_labeling", "label": "Community Labeling (Step 5)", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Community Labeling (Step 5)", "community": 2, "community_name": "Graph Detection & Output Formats", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_html_output", "label": "HTML Visualization Output (Step 6)", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 19.0, "font": {"size": 12, "color": "#ffffff"}, "title": "HTML Visualization Output (Step 6)", "community": 2, "community_name": "Graph Detection & Output Formats", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 3}, {"id": "skill_md_graphify_obsidian_output", "label": "Obsidian Vault Output", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Obsidian Vault Output", "community": 2, "community_name": "Graph Detection & Output Formats", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_wiki_output", "label": "Wiki Output (Step 6b)", "color": {"background": "#FF9DA7", "border": "#FF9DA7", "highlight": {"background": "#ffffff", "border": "#FF9DA7"}}, "size": 10.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Wiki Output (Step 6b)", "community": 7, "community_name": "Wiki Export", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 0}, {"id": "skill_md_graphify_neo4j_export", "label": "Neo4j Export (Step 7)", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Neo4j Export (Step 7)", "community": 4, "community_name": "Export & Query Modes", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 2}, {"id": "skill_md_graphify_svg_export", "label": "SVG Export (Step 7b)", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "SVG Export (Step 7b)", "community": 2, "community_name": "Graph Detection & Output Formats", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_graphml_export", "label": "GraphML Export (Step 7c)", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "GraphML Export (Step 7c)", "community": 4, "community_name": "Export & Query Modes", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_mcp_server", "label": "MCP Server (Step 7d)", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "MCP Server (Step 7d)", "community": 4, "community_name": "Export & Query Modes", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_token_benchmark", "label": "Token Reduction Benchmark (Step 8)", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Token Reduction Benchmark (Step 8)", "community": 3, "community_name": "Graph Analysis & Clustering", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_manifest_cleanup", "label": "Manifest Save and Cleanup (Step 9)", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Manifest Save and Cleanup (Step 9)", "community": 2, "community_name": "Graph Detection & Output Formats", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_update_mode", "label": "Incremental Update Mode (--update)", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 22.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Incremental Update Mode (--update)", "community": 0, "community_name": "Extraction & Ingestion Pipeline", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 4}, {"id": "skill_md_graphify_cluster_only_mode", "label": "Cluster-Only Mode (--cluster-only)", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Cluster-Only Mode (--cluster-only)", "community": 3, "community_name": "Graph Analysis & Clustering", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_query_mode", "label": "Query Mode (/graphify query)", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Query Mode (/graphify query)", "community": 4, "community_name": "Export & Query Modes", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_path_mode", "label": "Path Mode (/graphify path)", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Path Mode (/graphify path)", "community": 4, "community_name": "Export & Query Modes", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_explain_mode", "label": "Explain Mode (/graphify explain)", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Explain Mode (/graphify explain)", "community": 4, "community_name": "Export & Query Modes", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_add_mode", "label": "Add URL Mode (/graphify add)", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Add URL Mode (/graphify add)", "community": 0, "community_name": "Extraction & Ingestion Pipeline", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 2}, {"id": "skill_md_graphify_watch_mode", "label": "Watch Mode (--watch)", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 19.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Watch Mode (--watch)", "community": 0, "community_name": "Extraction & Ingestion Pipeline", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 3}, {"id": "skill_md_graphify_git_hook", "label": "Git Commit Hook Integration", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Git Commit Hook Integration", "community": 0, "community_name": "Extraction & Ingestion Pipeline", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 2}, {"id": "skill_md_graphify_claude_md_integration", "label": "CLAUDE.md Native Integration", "color": {"background": "#EDC948", "border": "#EDC948", "highlight": {"background": "#ffffff", "border": "#EDC948"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "CLAUDE.md Native Integration", "community": 5, "community_name": "Claude MD Integration", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_honesty_rules", "label": "Honesty Rules (No Invented Edges)", "color": {"background": "#B07AA1", "border": "#B07AA1", "highlight": {"background": "#ffffff", "border": "#B07AA1"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Honesty Rules (No Invented Edges)", "community": 6, "community_name": "Quality & Audit Rules", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_edge_confidence", "label": "Edge Confidence Tags (EXTRACTED/INFERRED/AMBIGUOUS)", "color": {"background": "#B07AA1", "border": "#B07AA1", "highlight": {"background": "#ffffff", "border": "#B07AA1"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Edge Confidence Tags (EXTRACTED/INFERRED/AMBIGUOUS)", "community": 6, "community_name": "Quality & Audit Rules", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_graph_json", "label": "graph.json Persistent Store", "color": {"background": "#59A14F", "border": "#59A14F", "highlight": {"background": "#ffffff", "border": "#59A14F"}}, "size": 28.0, "font": {"size": 12, "color": "#ffffff"}, "title": "graph.json Persistent Store", "community": 4, "community_name": "Export & Query Modes", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 6}, {"id": "skill_md_graphify_graph_report", "label": "GRAPH_REPORT.md Audit Report", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "GRAPH_REPORT.md Audit Report", "community": 3, "community_name": "Graph Analysis & Clustering", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 2}, {"id": "skill_md_graphify_transcription", "label": "Video/Audio Transcription (Step 2.5)", "color": {"background": "#E15759", "border": "#E15759", "highlight": {"background": "#ffffff", "border": "#E15759"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Video/Audio Transcription (Step 2.5)", "community": 2, "community_name": "Graph Detection & Output Formats", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_subagent_dispatch", "label": "Parallel Subagent Dispatch", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Parallel Subagent Dispatch", "community": 0, "community_name": "Extraction & Ingestion Pipeline", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_raw_folder_workflow", "label": "Raw Folder Workflow (Karpathy)", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Raw Folder Workflow (Karpathy)", "community": 0, "community_name": "Extraction & Ingestion Pipeline", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_community_detection", "label": "Community Detection", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Community Detection", "community": 3, "community_name": "Graph Analysis & Clustering", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 2}, {"id": "skill_md_graphify_god_nodes", "label": "God Nodes Analysis", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "God Nodes Analysis", "community": 3, "community_name": "Graph Analysis & Clustering", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_surprising_connections", "label": "Surprising Connections Analysis", "color": {"background": "#76B7B2", "border": "#76B7B2", "highlight": {"background": "#ffffff", "border": "#76B7B2"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Surprising Connections Analysis", "community": 3, "community_name": "Graph Analysis & Clustering", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_rationale_parallel", "label": "Rationale: Parallel AST + Semantic Extraction", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Rationale: Parallel AST + Semantic Extraction", "community": 0, "community_name": "Extraction & Ingestion Pipeline", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 2}, {"id": "skill_md_graphify_rationale_cache", "label": "Rationale: Extraction Cache for Incremental Runs", "color": {"background": "#4E79A7", "border": "#4E79A7", "highlight": {"background": "#ffffff", "border": "#4E79A7"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Rationale: Extraction Cache for Incremental Runs", "community": 0, "community_name": "Extraction & Ingestion Pipeline", "source_file": ".claude/skills/graphify/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_rationale_async_tradeoff", "label": "Rationale: Async Mode Race Condition Trade-off", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Rationale: Async Mode Race Condition Trade-off", "community": 1, "community_name": "Session Start Hook", "source_file": ".claude/skills/session-start-hook/SKILL.md", "file_type": "document", "degree": 1}, {"id": "skill_md_graphify_rationale_sync_default", "label": "Rationale: Synchronous Default for Dependency Guarantee", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Rationale: Synchronous Default for Dependency Guarantee", "community": 1, "community_name": "Session Start Hook", "source_file": ".claude/skills/session-start-hook/SKILL.md", "file_type": "document", "degree": 1}, {"id": "session_start_hook_skill", "label": "Session Start Hook Skill", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 25.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Session Start Hook Skill", "community": 1, "community_name": "Session Start Hook", "source_file": ".claude/skills/session-start-hook/SKILL.md", "file_type": "document", "degree": 5}, {"id": "session_start_hook_workflow", "label": "Session Start Hook Workflow", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 22.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Session Start Hook Workflow", "community": 1, "community_name": "Session Start Hook", "source_file": ".claude/skills/session-start-hook/SKILL.md", "file_type": "document", "degree": 4}, {"id": "session_start_hook_async_mode", "label": "Async Hook Mode", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 19.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Async Hook Mode", "community": 1, "community_name": "Session Start Hook", "source_file": ".claude/skills/session-start-hook/SKILL.md", "file_type": "document", "degree": 3}, {"id": "session_start_hook_env_vars", "label": "Hook Environment Variables", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 16.0, "font": {"size": 12, "color": "#ffffff"}, "title": "Hook Environment Variables", "community": 1, "community_name": "Session Start Hook", "source_file": ".claude/skills/session-start-hook/SKILL.md", "file_type": "document", "degree": 2}, {"id": "session_start_hook_settings_json", "label": "Hook Registration in .claude/settings.json", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Hook Registration in .claude/settings.json", "community": 1, "community_name": "Session Start Hook", "source_file": ".claude/skills/session-start-hook/SKILL.md", "file_type": "document", "degree": 1}, {"id": "session_start_hook_dependency_install", "label": "Dependency Installation Script", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Dependency Installation Script", "community": 1, "community_name": "Session Start Hook", "source_file": ".claude/skills/session-start-hook/SKILL.md", "file_type": "document", "degree": 1}, {"id": "session_start_hook_validate", "label": "Hook Validation (Linter + Test)", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "Hook Validation (Linter + Test)", "community": 1, "community_name": "Session Start Hook", "source_file": ".claude/skills/session-start-hook/SKILL.md", "file_type": "document", "degree": 1}, {"id": "session_start_hook_session_start_event", "label": "SessionStart Hook Event", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "SessionStart Hook Event", "community": 1, "community_name": "Session Start Hook", "source_file": ".claude/skills/session-start-hook/SKILL.md", "file_type": "document", "degree": 1}, {"id": "session_start_hook_claude_code_remote", "label": "CLAUDE_CODE_REMOTE Environment Flag", "color": {"background": "#F28E2B", "border": "#F28E2B", "highlight": {"background": "#ffffff", "border": "#F28E2B"}}, "size": 13.0, "font": {"size": 0, "color": "#ffffff"}, "title": "CLAUDE_CODE_REMOTE Environment Flag", "community": 1, "community_name": "Session Start Hook", "source_file": ".claude/skills/session-start-hook/SKILL.md", "file_type": "document", "degree": 1}];
+const RAW_EDGES = [{"from": "claude_md_graphify_skill", "to": "skill_md_graphify_skill", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "claude_md_graphify_skill", "to": "skill_md_graphify_claude_md_integration", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_skill", "to": "skill_md_graphify_trigger", "label": "implements", "title": "implements [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_skill", "to": "skill_md_graphify_pipeline", "label": "implements", "title": "implements [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_skill", "to": "session_start_hook_skill", "label": "semantically_similar_to", "title": "semantically_similar_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "skill_md_graphify_pipeline", "to": "skill_md_graphify_detect", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_pipeline", "to": "skill_md_graphify_transcription", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_pipeline", "to": "skill_md_graphify_ast_extraction", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_pipeline", "to": "skill_md_graphify_semantic_extraction", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_pipeline", "to": "skill_md_graphify_merge", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_pipeline", "to": "skill_md_graphify_build_cluster", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_pipeline", "to": "skill_md_graphify_community_labeling", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_pipeline", "to": "skill_md_graphify_html_output", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_pipeline", "to": "skill_md_graphify_manifest_cleanup", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_ast_extraction", "to": "skill_md_graphify_merge", "label": "shares_data_with", "title": "shares_data_with [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_ast_extraction", "to": "skill_md_graphify_rationale_parallel", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_ast_extraction", "to": "skill_md_graphify_update_mode", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_ast_extraction", "to": "skill_md_graphify_watch_mode", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_ast_extraction", "to": "skill_md_graphify_git_hook", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_semantic_extraction", "to": "skill_md_graphify_subagent_dispatch", "label": "implements", "title": "implements [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_semantic_extraction", "to": "skill_md_graphify_extraction_cache", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_semantic_extraction", "to": "skill_md_graphify_merge", "label": "shares_data_with", "title": "shares_data_with [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_semantic_extraction", "to": "skill_md_graphify_rationale_parallel", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_extraction_cache", "to": "skill_md_graphify_rationale_cache", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_extraction_cache", "to": "skill_md_graphify_update_mode", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_build_cluster", "to": "skill_md_graphify_community_detection", "label": "implements", "title": "implements [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_build_cluster", "to": "skill_md_graphify_god_nodes", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_build_cluster", "to": "skill_md_graphify_surprising_connections", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_build_cluster", "to": "skill_md_graphify_graph_report", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_build_cluster", "to": "skill_md_graphify_graph_json", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_html_output", "to": "skill_md_graphify_obsidian_output", "label": "conceptually_related_to", "title": "conceptually_related_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "skill_md_graphify_html_output", "to": "skill_md_graphify_svg_export", "label": "semantically_similar_to", "title": "semantically_similar_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "skill_md_graphify_neo4j_export", "to": "skill_md_graphify_graph_json", "label": "shares_data_with", "title": "shares_data_with [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_neo4j_export", "to": "skill_md_graphify_graphml_export", "label": "semantically_similar_to", "title": "semantically_similar_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "skill_md_graphify_mcp_server", "to": "skill_md_graphify_graph_json", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_token_benchmark", "to": "skill_md_graphify_graph_report", "label": "conceptually_related_to", "title": "conceptually_related_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "skill_md_graphify_update_mode", "to": "skill_md_graphify_add_mode", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_update_mode", "to": "skill_md_graphify_watch_mode", "label": "semantically_similar_to", "title": "semantically_similar_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "skill_md_graphify_cluster_only_mode", "to": "skill_md_graphify_community_detection", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_query_mode", "to": "skill_md_graphify_graph_json", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_path_mode", "to": "skill_md_graphify_graph_json", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_explain_mode", "to": "skill_md_graphify_graph_json", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_add_mode", "to": "skill_md_graphify_raw_folder_workflow", "label": "conceptually_related_to", "title": "conceptually_related_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "skill_md_graphify_watch_mode", "to": "skill_md_graphify_git_hook", "label": "semantically_similar_to", "title": "semantically_similar_to [INFERRED]", "dashes": true, "width": 1, "color": {"opacity": 0.35}, "confidence": "INFERRED"}, {"from": "skill_md_graphify_honesty_rules", "to": "skill_md_graphify_edge_confidence", "label": "conceptually_related_to", "title": "conceptually_related_to [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_rationale_async_tradeoff", "to": "session_start_hook_async_mode", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "skill_md_graphify_rationale_sync_default", "to": "session_start_hook_async_mode", "label": "rationale_for", "title": "rationale_for [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_start_hook_skill", "to": "session_start_hook_workflow", "label": "implements", "title": "implements [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_start_hook_skill", "to": "session_start_hook_async_mode", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_start_hook_skill", "to": "session_start_hook_env_vars", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_start_hook_skill", "to": "session_start_hook_session_start_event", "label": "implements", "title": "implements [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_start_hook_workflow", "to": "session_start_hook_dependency_install", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_start_hook_workflow", "to": "session_start_hook_settings_json", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_start_hook_workflow", "to": "session_start_hook_validate", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}, {"from": "session_start_hook_env_vars", "to": "session_start_hook_claude_code_remote", "label": "references", "title": "references [EXTRACTED]", "dashes": false, "width": 2, "color": {"opacity": 0.7}, "confidence": "EXTRACTED"}];
+const LEGEND = [{"cid": 0, "color": "#4E79A7", "label": "Extraction &amp; Ingestion Pipeline", "count": 12}, {"cid": 1, "color": "#F28E2B", "label": "Session Start Hook", "count": 11}, {"cid": 2, "color": "#E15759", "label": "Graph Detection &amp; Output Formats", "count": 8}, {"cid": 3, "color": "#76B7B2", "label": "Graph Analysis &amp; Clustering", "count": 7}, {"cid": 4, "color": "#59A14F", "label": "Export &amp; Query Modes", "count": 7}, {"cid": 5, "color": "#EDC948", "label": "Claude MD Integration", "count": 4}, {"cid": 6, "color": "#B07AA1", "label": "Quality &amp; Audit Rules", "count": 2}, {"cid": 7, "color": "#FF9DA7", "label": "Wiki Export", "count": 1}];
+
+// HTML-escape helper — prevents XSS when injecting graph data into innerHTML
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// Build vis datasets
+const nodesDS = new vis.DataSet(RAW_NODES.map(n => ({
+  id: n.id, label: n.label, color: n.color, size: n.size,
+  font: n.font, title: n.title,
+  _community: n.community, _community_name: n.community_name,
+  _source_file: n.source_file, _file_type: n.file_type, _degree: n.degree,
+})));
+
+const edgesDS = new vis.DataSet(RAW_EDGES.map((e, i) => ({
+  id: i, from: e.from, to: e.to,
+  label: '',
+  title: e.title,
+  dashes: e.dashes,
+  width: e.width,
+  color: e.color,
+  arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+})));
+
+const container = document.getElementById('graph');
+const network = new vis.Network(container, { nodes: nodesDS, edges: edgesDS }, {
+  physics: {
+    enabled: true,
+    solver: 'forceAtlas2Based',
+    forceAtlas2Based: {
+      gravitationalConstant: -60,
+      centralGravity: 0.005,
+      springLength: 120,
+      springConstant: 0.08,
+      damping: 0.4,
+      avoidOverlap: 0.8,
+    },
+    stabilization: { iterations: 200, fit: true },
+  },
+  interaction: {
+    hover: true,
+    tooltipDelay: 100,
+    hideEdgesOnDrag: true,
+    navigationButtons: false,
+    keyboard: false,
+  },
+  nodes: { shape: 'dot', borderWidth: 1.5 },
+  edges: { smooth: { type: 'continuous', roundness: 0.2 }, selectionWidth: 3 },
+});
+
+network.once('stabilizationIterationsDone', () => {
+  network.setOptions({ physics: { enabled: false } });
+});
+
+function showInfo(nodeId) {
+  const n = nodesDS.get(nodeId);
+  if (!n) return;
+  const neighborIds = network.getConnectedNodes(nodeId);
+  const neighborItems = neighborIds.map(nid => {
+    const nb = nodesDS.get(nid);
+    const color = nb ? nb.color.background : '#555';
+    return `<span class="neighbor-link" style="border-left-color:${esc(color)}" onclick="focusNode(${JSON.stringify(nid)})">${esc(nb ? nb.label : nid)}</span>`;
+  }).join('');
+  document.getElementById('info-content').innerHTML = `
+    <div class="field"><b>${esc(n.label)}</b></div>
+    <div class="field">Type: ${esc(n._file_type || 'unknown')}</div>
+    <div class="field">Community: ${esc(n._community_name)}</div>
+    <div class="field">Source: ${esc(n._source_file || '-')}</div>
+    <div class="field">Degree: ${n._degree}</div>
+    ${neighborIds.length ? `<div class="field" style="margin-top:8px;color:#aaa;font-size:11px">Neighbors (${neighborIds.length})</div><div id="neighbors-list">${neighborItems}</div>` : ''}
+  `;
+}
+
+function focusNode(nodeId) {
+  network.focus(nodeId, { scale: 1.4, animation: true });
+  network.selectNodes([nodeId]);
+  showInfo(nodeId);
+}
+
+// Track hovered node — hover detection is more reliable than click params
+let hoveredNodeId = null;
+network.on('hoverNode', params => {
+  hoveredNodeId = params.node;
+  container.style.cursor = 'pointer';
+});
+network.on('blurNode', () => {
+  hoveredNodeId = null;
+  container.style.cursor = 'default';
+});
+container.addEventListener('click', () => {
+  if (hoveredNodeId !== null) {
+    showInfo(hoveredNodeId);
+    network.selectNodes([hoveredNodeId]);
+  }
+});
+network.on('click', params => {
+  if (params.nodes.length > 0) {
+    showInfo(params.nodes[0]);
+  } else if (hoveredNodeId === null) {
+    document.getElementById('info-content').innerHTML = '<span class="empty">Click a node to inspect it</span>';
+  }
+});
+
+const searchInput = document.getElementById('search');
+const searchResults = document.getElementById('search-results');
+searchInput.addEventListener('input', () => {
+  const q = searchInput.value.toLowerCase().trim();
+  searchResults.innerHTML = '';
+  if (!q) { searchResults.style.display = 'none'; return; }
+  const matches = RAW_NODES.filter(n => n.label.toLowerCase().includes(q)).slice(0, 20);
+  if (!matches.length) { searchResults.style.display = 'none'; return; }
+  searchResults.style.display = 'block';
+  matches.forEach(n => {
+    const el = document.createElement('div');
+    el.className = 'search-item';
+    el.textContent = n.label;
+    el.style.borderLeft = `3px solid ${n.color.background}`;
+    el.style.paddingLeft = '8px';
+    el.onclick = () => {
+      network.focus(n.id, { scale: 1.5, animation: true });
+      network.selectNodes([n.id]);
+      showInfo(n.id);
+      searchResults.style.display = 'none';
+      searchInput.value = '';
+    };
+    searchResults.appendChild(el);
+  });
+});
+document.addEventListener('click', e => {
+  if (!searchResults.contains(e.target) && e.target !== searchInput)
+    searchResults.style.display = 'none';
+});
+
+const hiddenCommunities = new Set();
+const legendEl = document.getElementById('legend');
+LEGEND.forEach(c => {
+  const item = document.createElement('div');
+  item.className = 'legend-item';
+  item.innerHTML = `<div class="legend-dot" style="background:${c.color}"></div>
+    <span class="legend-label">${c.label}</span>
+    <span class="legend-count">${c.count}</span>`;
+  item.onclick = () => {
+    if (hiddenCommunities.has(c.cid)) {
+      hiddenCommunities.delete(c.cid);
+      item.classList.remove('dimmed');
+    } else {
+      hiddenCommunities.add(c.cid);
+      item.classList.add('dimmed');
+    }
+    const updates = RAW_NODES
+      .filter(n => n.community === c.cid)
+      .map(n => ({ id: n.id, hidden: hiddenCommunities.has(c.cid) }));
+    nodesDS.update(updates);
+  };
+  legendEl.appendChild(item);
+});
+</script>
+<script>
+// Render hyperedges as shaded regions
+const hyperedges = [{"id": "graphify_output_formats", "label": "Graphify Output Format Options", "nodes": ["skill_md_graphify_html_output", "skill_md_graphify_obsidian_output", "skill_md_graphify_neo4j_export", "skill_md_graphify_svg_export", "skill_md_graphify_graphml_export", "skill_md_graphify_wiki_output", "skill_md_graphify_mcp_server"], "relation": "implement", "confidence": "EXTRACTED", "confidence_score": 0.95, "source_file": ".claude/skills/graphify/SKILL.md"}, {"id": "graphify_extraction_pipeline", "label": "Graphify Three-Stage Extraction Pipeline", "nodes": ["skill_md_graphify_ast_extraction", "skill_md_graphify_semantic_extraction", "skill_md_graphify_merge"], "relation": "participate_in", "confidence": "EXTRACTED", "confidence_score": 0.95, "source_file": ".claude/skills/graphify/SKILL.md"}, {"id": "session_hook_setup_workflow", "label": "Session Hook Setup and Validation Workflow", "nodes": ["session_start_hook_dependency_install", "session_start_hook_settings_json", "session_start_hook_validate"], "relation": "participate_in", "confidence": "EXTRACTED", "confidence_score": 0.92, "source_file": ".claude/skills/session-start-hook/SKILL.md"}];
+// afterDrawing passes ctx already transformed to network coordinate space.
+// Draw node positions raw — no manual pan/zoom/DPR math needed.
+network.on('afterDrawing', function(ctx) {
+    hyperedges.forEach(h => {
+        const positions = h.nodes
+            .map(nid => network.getPositions([nid])[nid])
+            .filter(p => p !== undefined);
+        if (positions.length < 2) return;
+        ctx.save();
+        ctx.globalAlpha = 0.12;
+        ctx.fillStyle = '#6366f1';
+        ctx.strokeStyle = '#6366f1';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        // Centroid and expanded hull in network coordinates
+        const cx = positions.reduce((s, p) => s + p.x, 0) / positions.length;
+        const cy = positions.reduce((s, p) => s + p.y, 0) / positions.length;
+        const expanded = positions.map(p => ({
+            x: cx + (p.x - cx) * 1.15,
+            y: cy + (p.y - cy) * 1.15
+        }));
+        ctx.moveTo(expanded[0].x, expanded[0].y);
+        expanded.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 0.4;
+        ctx.stroke();
+        // Label
+        ctx.globalAlpha = 0.8;
+        ctx.fillStyle = '#4f46e5';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(h.label, cx, cy - 5);
+        ctx.restore();
+    });
+});
+</script>
+</body>
+</html>
